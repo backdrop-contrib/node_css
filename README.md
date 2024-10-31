@@ -8,10 +8,6 @@ The **Node CSS** module for Backdrop CMS allows administrators to add custom CSS
 - Enable or disable custom CSS for individual content types.
 - CSS is added inline to the head of the page, applying only to specific nodes.
 
-## Requirements
-
-Backdrop CMS 1.x
-
 ## Installation
 
 1. Download and place the `node_css` module in your Backdrop `modules` directory, typically found in `sites/all/modules`.
