@@ -76,7 +76,7 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
   $enabled_content_types = $config->get('enabled_content_types');
 
   // Return early if no content type or current content type is not selected.
-  if (!in_array($form['#node']->type, $enabled_content_types)) {
+  if (!empty($enabled_content_types) && !in_array($form['#node']->type, $enabled_content_types)) {
     return;
   }
 
