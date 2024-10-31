@@ -23,7 +23,7 @@ The **Node CSS** module for Backdrop CMS allows administrators to add custom CSS
 ## Usage
 
 1. After enabling **Node CSS** for a content type, go to the node edit form for a node of that type.
-2. You will see a **Custom CSS** textarea field at the bottom of the form.
+2. You will see a **Custom CSS** textarea field at the top of the form.
 3. Enter your custom CSS for that node, then save the node.
 4. The CSS will be added inline to the head of the node’s page, applying only to that specific node.
 
