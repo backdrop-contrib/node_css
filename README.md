@@ -33,14 +33,16 @@ If you want to add a custom background color to a specific node of an enabled co
 
 ```css
 body {
-  background-color: #f0f0f0;
+  background-color:  red !important;
 }
 ```
-This will apply a light grey background only to that specific node page.
+This will apply a red background only to that specific node page.
 
 ## Troubleshooting
 
-CSS may not apply as expected if there are conflicting styles or higher specificity from other stylesheets. Bugs and Feature requests should be reported in the Issue Queue:
+CSS may not apply as expected if there are conflicting styles or higher specificity from other stylesheets.
+
+Bugs and Feature requests should be reported in the Issue Queue:
 https://github.com/backdrop-contrib/node_css/issues.
 
 ## Maintainers
