@@ -1,0 +1,9 @@
+<?php
+
+/**
+ * Implements hook_uninstall().
+ */
+function node_css_uninstall() {
+  // Delete the configuration when the module is uninstalled.
+  config('node_css.settings')->delete();
+}

@@ -1,0 +1,6 @@
+name = Node CSS
+description = "Allows custom Cascading Style Sheets (CSS) to be added to individual nodes."
+backdrop = 1.x
+type = module
+dependencies[] = "node"
+package = "Content"

@@ -1,0 +1,4 @@
+{
+    "_config_name": "node_css.settings",
+    "default": ".field-name-body:before {\r\n    padding: 5px;\r\n    content: \"Success! The Node CSS module is up and running! 🎉\";\r\n    background: red;\r\n    color: white;\r\n}"
+}
