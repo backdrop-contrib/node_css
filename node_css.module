@@ -65,7 +65,6 @@ function node_css_settings_form_submit($form, &$form_state) {
   backdrop_set_message(t('The Node CSS settings have been saved.'));
 }
 
-
 /**
  * Implements hook_form_FORM_ID_alter() to add a CSS field to node forms.
  */
@@ -116,15 +115,26 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
     '#weight' => -99,
   );
 
-  // Attach custom CSS to the node object when the form is submitted.
-  $form['#submit'][] = 'node_css_form_node_form_submit';
 }
 
 /**
- * Custom submit handler to save custom CSS with the node.
+ * Implement hook_node_insert().
+ *
+ * @param Node $node
+ * @return void
  */
-function node_css_form_node_form_submit($form, &$form_state) {
-  config_set('node_css.settings', 'node-' . $form_state['node']->nid, $form_state['values']['css_text']);
+function node_css_node_insert(Node $node) {
+  config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
+}
+
+/**
+ * Implement hook_node_update().
+ *
+ * @param Node $node
+ * @return void
+ */
+function node_css_node_update(Node $node) {
+  config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
 }
 
 /**
