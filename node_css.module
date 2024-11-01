@@ -7,98 +7,17 @@ function node_css_menu() {
   $items = [];
 
   // Define the settings page.
-  $items['admin/config/content/node_css'] = [
+  $items['admin/config/content/node_css'] = array(
     'title' => 'Node CSS Settings',
     'description' => 'Settings for custom CSS on nodes.',
     'page callback' => 'backdrop_get_form',
-    'page arguments' => ['node_css_settings_form'],
-    'access arguments' => ['administer site configuration'],
-    'type' => MENU_NORMAL_ITEM,
-  ];
+    'page arguments' => array('node_css_settings'),
+    'file' => 'node_css.admin.inc',
+    'access arguments' => array('administer site configuration'),
+  );
 
   return $items;
 }
-
-/**
- * Define the Node CSS settings form with content type selection.
- */
-function node_css_settings_form($form, &$form_state) {
-  // Load existing configuration.
-  $config = config('node_css.settings');
-
-  // Retrieve all content types.
-  $content_types = node_type_get_types();
-  $options = [];
-
-  // Prepare options array with machine names and labels.
-  foreach ($content_types as $type => $info) {
-    $options[$type] = $info->name;
-  }
-
-  // Checkbox list for selecting content types.
-  $form['enabled_content_types'] = [
-    '#type' => 'checkboxes',
-    '#title' => t('Enable Node CSS for Content Types'),
-    '#description' => t('Select the content types for which the Node CSS module should be active.'),
-    '#options' => $options,
-    '#default_value' => $config->get('enabled_content_types') ?: [],
-  ];
-
-  // Available themes for CodeMirror.
-  $themes = ['default' => 'Default'];  // Start with the default theme.
-
-// Path to the theme directory.
-  $theme_dir = backdrop_get_path('module', 'node_css') . '/codemirror/theme';
-
-// Check if the directory exists and then scan for theme files.
-  if (is_dir($theme_dir)) {
-    $theme_files = scandir($theme_dir);
-
-    // Loop through each file and add it to the themes list if it's a CSS file.
-    foreach ($theme_files as $file) {
-      if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
-        // Get the theme name without the .css extension.
-        $theme_name = pathinfo($file, PATHINFO_FILENAME);
-        // Convert theme name to title case for display (e.g., "material" becomes "Material").
-        $display_name = ucwords(str_replace('-', ' ', $theme_name));
-        // Add to the themes array.
-        $themes[$theme_name] = $display_name;
-      }
-    }
-  }
-
-  // Select list for choosing the CodeMirror theme.
-  $form['codemirror_theme'] = [
-    '#type' => 'select',
-    '#title' => t('Theme'),
-    '#description' => t('Choose a theme for the CSS editor.'),
-    '#options' => $themes,
-    '#default_value' => $config->get('codemirror_theme') ?: 'default',
-  ];
-
-  // Submit button.
-  $form['submit'] = [
-    '#type' => 'submit',
-    '#value' => t('Save settings'),
-  ];
-
-  return $form;
-}
-
-/**
- * Submit handler for the Node CSS settings form.
- */
-function node_css_settings_form_submit($form, &$form_state) {
-  // Save selected content types and CodeMirror theme in configuration.
-  $config = config('node_css.settings');
-  $config->set('enabled_content_types', array_filter($form_state['values']['enabled_content_types']));
-  $config->set('codemirror_theme', $form_state['values']['codemirror_theme']);
-  $config->save();
-
-  // Display a status message.
-  backdrop_set_message(t('The Node CSS settings have been saved.'));
-}
-
 
 /**
  * Implements hook_form_FORM_ID_alter() to add a CSS field to node forms
@@ -111,15 +30,18 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
   $enabled_content_types = $config->get('enabled_content_types');
   $selected_theme = $config->get('codemirror_theme') ?: 'default';  // Default theme if none is set.
 
-  // Return early if no content type or current content type is not selected.
-  if (!empty($enabled_content_types) && !in_array($form['#node']->type, $enabled_content_types)) {
+// Get the content type of the current node.
+  $content_type = $form['#node']->type;
+
+// Return early if no content type or current content type is not selected.
+  if (!empty($enabled_content_types) && !in_array($content_type, $enabled_content_types)) {
     return;
   }
 
-  // If at the right content type page, get the default value.
-  $default_value = $config->get('node-' . $form['#node']->nid) ?? $config->get('default');
+// Check for node-specific CSS; if not found, fall back to content-type default CSS.
+  $default_value = $config->get('node-' . $form['#node']->nid) ?? $config->get('default_css_' . $content_type);
 
-  // Define the textarea with custom CSS settings.
+// Define the textarea with custom CSS settings.
   $form['css_text'] = [
     '#type' => 'textarea',
     '#rows' => 10,
@@ -128,6 +50,54 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
     '#weight' => -100,
     '#attributes' => ['class' => ['codemirror-css-editor']],  // Add custom class for targeting.
   ];
+
+  // Attach CodeMirror using the helper function.
+  node_css_attach_codemirror($form);
+}
+
+
+/**
+ * Implement hook_node_insert().
+ *
+ * @param Node $node
+ * @return void
+ */
+function node_css_node_insert(Node $node) {
+  config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
+}
+
+/**
+ * Implement hook_node_update().
+ *
+ * @param Node $node
+ * @return void
+ */
+function node_css_node_update(Node $node) {
+  config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
+}
+
+/**
+ * Implements hook_node_view() to add custom CSS to the node.
+ */
+function node_css_node_view($node, $view_mode) {
+  $config = config('node_css.settings');
+  if ($node_css = $config->get('node-' . $node->nid)) {
+    $custom_css = '<style media="all">' . $node_css . '</style>' . PHP_EOL;
+    backdrop_add_html_head([
+      '#type' => 'markup',
+      '#markup' => $custom_css,
+      '#weight' => 100,
+    ], 'node_css_' . $node->nid);
+  }
+}
+
+/**
+ * Helper function to attach CodeMirror to a form.
+ */
+function node_css_attach_codemirror(&$form, $textarea_selector = '.codemirror-css-editor') {
+  // Load existing configuration.
+  $config = config('node_css.settings');
+  $selected_theme = $config->get('codemirror_theme') ?: 'default';
 
   // Attach the CodeMirror library and chosen theme from CDN.
   $form['#attached']['js'][] = [
@@ -140,41 +110,40 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
   ];
   $form['#attached']['css'][] = [
     'type' => 'file',
-    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/codemirror.min.css',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/css/codemirror.min.css',
   ];
 
+  // CSS property value autocompletion.
   $form['#attached']['js'][] = [
-    'type' => 'external',
-    'data' => 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/hint/show-hint.min.js',
+    'type' => 'file',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/js/show-hint.min.js',
+  ];
+  $form['#attached']['js'][] = [
+    'type' => 'file',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/js/css-hint.min.js',
   ];
   $form['#attached']['css'][] = [
-    'type' => 'external',
-    'data' => 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/hint/show-hint.min.css',
+    'type' => 'file',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/css/show-hint.min.css',
   ];
-  $form['#attached']['js'][] = [
-    'type' => 'external',
-    'data' => 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/hint/css-hint.min.js',
-  ];
-
-
 
   $form['#attached']['css'][] = [
     'type' => 'inline',
     'data' => '
     .CodeMirror {
-    font-size: 12px;
-    line-height: 1.4;
-    resize: both;
-    border: 1px #bbb solid;
+      font-size: 12px;
+      line-height: 1.4;
+      resize: both;
+      border: 1px #bbb solid;
     }
     .CodeMirror::after {
-    content: \'\';
-    position: absolute;
-    left: 80ch;
-    top: 0;
-    bottom: 0;
-    border-left: 1px dashed #ccc;
-    pointer-events: none;
+      content: \'\';
+      position: absolute;
+      left: 80ch;
+      top: 0;
+      bottom: 0;
+      border-left: 1px dashed #ccc;
+      pointer-events: none;
     }
     ',
   ];
@@ -209,26 +178,29 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
                   })
                   .catch(error => console.error('Error fetching CSS suggestions:', error));
 
-                var editor = CodeMirror.fromTextArea(document.querySelector('.codemirror-css-editor'), {
-                  mode: 'css',
-                  lineNumbers: true,
-                  lineWrapping: true,
-                  theme: '{$selected_theme}',  // Apply user-selected theme.
-                  extraKeys: {
-                    'Space': function(cm) {  // Trigger autocompletion on Space key and insert a space.
-                      cm.replaceSelection(' ');  // Insert a regular space before showing suggestions.
-                      var hintOptions = customCssHint(cm);
-                      if (hintOptions.list && hintOptions.list.length > 0) {
-                        CodeMirror.showHint(cm, function(cmInstance) {
-                          return hintOptions;
-                        }, { completeSingle: false });
+                var editors = document.querySelectorAll('{$textarea_selector}');
+                editors.forEach(function(textarea) {
+                  CodeMirror.fromTextArea(textarea, {
+                    mode: 'css',
+                    lineNumbers: true,
+                    lineWrapping: true,
+                    theme: '{$selected_theme}',  // Apply user-selected theme.
+                    extraKeys: {
+                      'Space': function(cm) {  // Trigger autocompletion on Space key and insert a space.
+                        cm.replaceSelection(' ');  // Insert a regular space before showing suggestions.
+                        var hintOptions = customCssHint(cm);
+                        if (hintOptions.list && hintOptions.list.length > 0) {
+                          CodeMirror.showHint(cm, function(cmInstance) {
+                            return hintOptions;
+                          }, { completeSingle: false });
+                        }
                       }
+                    },
+                    hintOptions: {
+                      hint: customCssHint,  // Custom hint function.
+                      completeSingle: false  // Do not auto-complete a single option.
                     }
-                  },
-                  hintOptions: {
-                    hint: customCssHint,  // Custom hint function.
-                    completeSingle: false  // Do not auto-complete a single option.
-                  }
+                  });
                 });
 
                 // Custom hint function for context-specific CSS autocompletion using local data.
@@ -268,43 +240,4 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
                 }
               });"
   ];
-
-
-
-}
-
-
-/**
- * Implement hook_node_insert().
- *
- * @param Node $node
- * @return void
- */
-function node_css_node_insert(Node $node) {
-  config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
-}
-
-/**
- * Implement hook_node_update().
- *
- * @param Node $node
- * @return void
- */
-function node_css_node_update(Node $node) {
-  config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
-}
-
-/**
- * Implements hook_node_view() to add custom CSS to the node.
- */
-function node_css_node_view($node, $view_mode) {
-  $config = config('node_css.settings');
-  if ($node_css = $config->get('node-' . $node->nid)) {
-    $custom_css = '<style media="all">' . $node_css . '</style>' . PHP_EOL;
-    backdrop_add_html_head([
-      '#type' => 'markup',
-      '#markup' => $custom_css,
-      '#weight' => 100,
-    ], 'node_css_' . $node->nid);
-  }
 }

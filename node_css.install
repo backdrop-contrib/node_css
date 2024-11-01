@@ -1,9 +1,49 @@
 <?php
 
 /**
- * Implements hook_uninstall().
+ * Implements hook_uninstall() for the Node CSS module.
  */
 function node_css_uninstall() {
-  // Delete the configuration when the module is uninstalled.
-  config('node_css.settings')->delete();
+  // Load the configuration for export.
+  $config = config('node_css.settings');
+  $config_data = $config->get();
+
+  // Check if there's data to export.
+  if (!empty($config_data)) {
+    // Define the export path.
+    $file_path = 'public://node_css.settings.json';
+
+    // Convert the configuration to JSON format.
+    $json_data = json_encode($config_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+    // Attempt to write the JSON data to a file.
+    if (file_unmanaged_save_data($json_data, $file_path, FILE_EXISTS_REPLACE) !== FALSE) {
+      $real_path = file_create_url($file_path);
+
+      // If called from a web interface, show a message with a download link.
+      if (PHP_SAPI !== 'cli') {
+        backdrop_set_message(t('A copy of the Node CSS configuration has been saved. You can download it here: <a href="@url">node_css.settings.json</a>.', [
+          '@url' => $real_path,
+        ]));
+      }
+      else {
+        // If called from the command line, output the path to the saved file.
+        echo "Node CSS configuration has been exported to: " . $real_path . PHP_EOL;
+      }
+    }
+    else {
+      // If export fails, handle messaging based on the environment.
+      $error_message = t('Failed to export the Node CSS configuration. Please ensure the files directory is writable.');
+      if (PHP_SAPI !== 'cli') {
+        backdrop_set_message($error_message, 'error');
+      }
+      else {
+        echo $error_message . PHP_EOL;
+      }
+    }
+  }
+
+  // Delete the configuration.
+  $config->delete();
 }
+
