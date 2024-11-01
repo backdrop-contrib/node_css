@@ -51,5 +51,6 @@ This module is maintained by [Alan Mels](https://github.com/alanmels) of [AltaGr
 
 ## Credits
 
-This module was inspired by the [CSS Injector](https://github.com/backdrop-contrib/css_injector) module but designed with simplicity in mind to meet a specific need: allowing custom CSS rules directly on the node edit page, without the additional complexity of site-wide CSS management. We borrowed the CSS syntax highlighter from **CSS Injector** to enhance the editing experience.
+This module introduces the CodeMirror CSS editor to enhance the editing experience, allowing custom CSS rules to be added directly on the node edit page. It is designed with simplicity in mind to meet the specific need of per-node CSS customization without the additional complexity of site-wide CSS management. We utilize CodeMirror's syntax highlighting and theme support to provide a more robust and user-friendly CSS editing environment.
+
 

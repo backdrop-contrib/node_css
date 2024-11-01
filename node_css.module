@@ -44,6 +44,38 @@ function node_css_settings_form($form, &$form_state) {
     '#default_value' => $config->get('enabled_content_types') ?: [],
   ];
 
+  // Available themes for CodeMirror.
+  $themes = ['default' => 'Default'];  // Start with the default theme.
+
+// Path to the theme directory.
+  $theme_dir = backdrop_get_path('module', 'node_css') . '/codemirror/theme';
+
+// Check if the directory exists and then scan for theme files.
+  if (is_dir($theme_dir)) {
+    $theme_files = scandir($theme_dir);
+
+    // Loop through each file and add it to the themes list if it's a CSS file.
+    foreach ($theme_files as $file) {
+      if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
+        // Get the theme name without the .css extension.
+        $theme_name = pathinfo($file, PATHINFO_FILENAME);
+        // Convert theme name to title case for display (e.g., "material" becomes "Material").
+        $display_name = ucwords(str_replace('-', ' ', $theme_name));
+        // Add to the themes array.
+        $themes[$theme_name] = $display_name;
+      }
+    }
+  }
+
+  // Select list for choosing the CodeMirror theme.
+  $form['codemirror_theme'] = [
+    '#type' => 'select',
+    '#title' => t('Theme'),
+    '#description' => t('Choose a theme for the CSS editor.'),
+    '#options' => $themes,
+    '#default_value' => $config->get('codemirror_theme') ?: 'default',
+  ];
+
   // Submit button.
   $form['submit'] = [
     '#type' => 'submit',
@@ -57,65 +89,102 @@ function node_css_settings_form($form, &$form_state) {
  * Submit handler for the Node CSS settings form.
  */
 function node_css_settings_form_submit($form, &$form_state) {
-  // Save selected content types in configuration.
+  // Save selected content types and CodeMirror theme in configuration.
   $config = config('node_css.settings');
-  $config->set('enabled_content_types', array_filter($form_state['values']['enabled_content_types']))->save();
+  $config->set('enabled_content_types', array_filter($form_state['values']['enabled_content_types']));
+  $config->set('codemirror_theme', $form_state['values']['codemirror_theme']);
+  $config->save();
 
   // Display a status message.
   backdrop_set_message(t('The Node CSS settings have been saved.'));
 }
 
+
 /**
- * Implements hook_form_FORM_ID_alter() to add a CSS field to node forms.
+ * Implements hook_form_FORM_ID_alter() to add a CSS field to node forms
+ * with CodeMirror CSS editor support using a CDN.
  */
 function node_css_form_node_form_alter(&$form, &$form_state) {
 
   // Load existing configuration.
   $config = config('node_css.settings');
   $enabled_content_types = $config->get('enabled_content_types');
+  $selected_theme = $config->get('codemirror_theme') ?: 'default';  // Default theme if none is set.
 
   // Return early if no content type or current content type is not selected.
   if (!empty($enabled_content_types) && !in_array($form['#node']->type, $enabled_content_types)) {
     return;
   }
 
-  // If at right content type page, get the default value.
+  // If at the right content type page, get the default value.
   $default_value = $config->get('node-' . $form['#node']->nid) ?? $config->get('default');
 
-  $form['#attached']['js'] = array(
-    'https://cdnjs.cloudflare.com/ajax/libs/ace/1.34.1/ace.js' => array(
-      'preprocess' => FALSE,
-    ),
-    'https://cdnjs.cloudflare.com/ajax/libs/ace/1.34.1/theme-chrome.js' => array(
-      'preprocess' => FALSE,
-    ),
-    'https://cdnjs.cloudflare.com/ajax/libs/ace/1.34.1/mode-css.js' => array(
-      'preprocess' => FALSE,
-    ),
-    backdrop_get_path('module', 'node_css') . '/syntax_highlighter.js' => array(
-      'preprocess' => FALSE,
-    ),
-  );
-
-  $form['#attached']['css'] = array(
-    backdrop_get_path('module', 'node_css') . '/syntax_highlighter.css',
-  );
-
-  $form['css_text'] = array(
+  // Define the textarea with custom CSS settings.
+  $form['css_text'] = [
     '#type' => 'textarea',
     '#rows' => 10,
     '#description' => t('Add custom CSS for this node.'),
     '#default_value' => $default_value,
     '#weight' => -100,
-  );
+    '#attributes' => ['class' => ['codemirror-css-editor']],  // Add custom class for targeting.
+  ];
 
-  $form['css_text_ace'] = array(
-    '#prefix' => '<span class="disable-ace">Disable syntax highlighter</span>',
-    '#markup' => '<div class="ace-editor"><div id="editor">' . $default_value . '</div></div>',
-    '#weight' => -99,
-  );
+  // Attach the CodeMirror library and chosen theme from CDN.
+  $form['#attached']['js'][] = [
+    'type' => 'file',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/js/codemirror.min.js',
+  ];
+  $form['#attached']['js'][] = [
+    'type' => 'file',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/js/css.min.js',
+  ];
+  $form['#attached']['css'][] = [
+    'type' => 'file',
+    'data' => backdrop_get_path('module', 'node_css') . '/codemirror/codemirror.min.css',
+  ];
+  $form['#attached']['css'][] = [
+    'type' => 'inline',
+    'data' => '
+    .CodeMirror {
+    font-size: 12px;
+    line-height: 1.4;
+    resize: both;
+    border: 1px #bbb solid;
+    }
+    .CodeMirror::after {
+    content: \'\';
+    position: absolute;
+    left: 80ch;
+    top: 0;
+    bottom: 0;
+    border-left: 1px dashed #ccc;
+    pointer-events: none;
+    }
+    ',
+  ];
 
+  // Add theme-specific CSS file based on the selected theme.
+  if ($selected_theme !== 'default') {
+    $form['#attached']['css'][] = [
+      'type' => 'external',
+      'data' => "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/{$selected_theme}.min.css",
+    ];
+  }
+
+  // Custom inline JavaScript to initialize CodeMirror on the textarea with the chosen theme.
+  $form['#attached']['js'][] = [
+    'type' => 'inline',
+    'data' => "document.addEventListener('DOMContentLoaded', function() {
+                var editor = CodeMirror.fromTextArea(document.querySelector('.codemirror-css-editor'), {
+                  mode: 'css',
+                  lineNumbers: true,
+                  lineWrapping: true,
+                  theme: '{$selected_theme}',  // Apply user-selected theme.
+                });
+              });",
+  ];
 }
+
 
 /**
  * Implement hook_node_insert().
