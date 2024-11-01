@@ -52,10 +52,11 @@ function node_css_settings() {
   $form['enabled_content_types'] = [
     '#type' => 'checkboxes',
     '#title' => t('Enable Node CSS for Content Types'),
-    '#description' => t('Select the content types for which the Node CSS module should be active.'),
+    '#description' => t('Select the content types for which the Node CSS module should be active. If no content types are selected, Node CSS will apply to all content types.'),
     '#options' => $options,
     '#default_value' => $config->get('enabled_content_types') ?: [],
   ];
+
 
   // Add a default CSS textarea for each content type, shown only if that type is selected.
   foreach ($options as $type => $label) {

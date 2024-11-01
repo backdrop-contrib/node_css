@@ -24,24 +24,23 @@ function node_css_menu() {
  * with CodeMirror CSS editor support using a CDN.
  */
 function node_css_form_node_form_alter(&$form, &$form_state) {
-
   // Load existing configuration.
   $config = config('node_css.settings');
   $enabled_content_types = $config->get('enabled_content_types');
-  $selected_theme = $config->get('codemirror_theme') ?: 'default';  // Default theme if none is set.
-
-// Get the content type of the current node.
   $content_type = $form['#node']->type;
 
-// Return early if no content type or current content type is not selected.
+  // If specific content types are selected, apply Node CSS only to those types.
+  // Return early if the current content type is not among the selected types.
   if (!empty($enabled_content_types) && !in_array($content_type, $enabled_content_types)) {
     return;
   }
 
-// Check for node-specific CSS; if not found, fall back to content-type default CSS.
-  $default_value = $config->get('node-' . $form['#node']->nid) ?? $config->get('default_css_' . $content_type);
+  // Determine the default CSS value, checking in order: node-specific CSS, content-type default CSS, or global default CSS.
+  $default_value = $config->get('node-' . $form['#node']->nid)
+    ?? $config->get('default_css_' . $content_type)
+    ?? $config->get('default');
 
-// Define the textarea with custom CSS settings.
+  // Define the textarea with custom CSS settings.
   $form['css_text'] = [
     '#type' => 'textarea',
     '#rows' => 10,
@@ -54,6 +53,8 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
   // Attach CodeMirror using the helper function.
   node_css_attach_codemirror($form);
 }
+
+
 
 
 /**
@@ -77,10 +78,18 @@ function node_css_node_update(Node $node) {
 }
 
 /**
- * Implements hook_node_view() to add custom CSS to the node.
+ * Implements hook_node_view() to add custom CSS to the node if enabled for its content type.
  */
 function node_css_node_view($node, $view_mode) {
   $config = config('node_css.settings');
+  $enabled_content_types = $config->get('enabled_content_types');
+
+  // If specific content types are selected, apply only to those types.
+  if (!empty($enabled_content_types) && !in_array($node->type, $enabled_content_types)) {
+    return;
+  }
+
+  // Check for node-specific CSS.
   if ($node_css = $config->get('node-' . $node->nid)) {
     $custom_css = '<style media="all">' . $node_css . '</style>' . PHP_EOL;
     backdrop_add_html_head([
@@ -90,6 +99,7 @@ function node_css_node_view($node, $view_mode) {
     ], 'node_css_' . $node->nid);
   }
 }
+
 
 /**
  * Helper function to attach CodeMirror to a form.

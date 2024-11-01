@@ -4,4 +4,4 @@ backdrop = 1.x
 type = module
 dependencies[] = "node"
 package = "Content"
-
+configure = admin/config/content/node_css
