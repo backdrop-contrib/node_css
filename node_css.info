@@ -5,3 +5,5 @@ type = module
 dependencies[] = "node"
 package = "Content"
 configure = admin/config/content/node_css
+maintainers[alanmels] = Alan Mels
+maintainers_wanted = TRUE
