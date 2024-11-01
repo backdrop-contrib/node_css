@@ -142,6 +142,22 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
     'type' => 'file',
     'data' => backdrop_get_path('module', 'node_css') . '/codemirror/codemirror.min.css',
   ];
+
+  $form['#attached']['js'][] = [
+    'type' => 'external',
+    'data' => 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/hint/show-hint.min.js',
+  ];
+  $form['#attached']['css'][] = [
+    'type' => 'external',
+    'data' => 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/hint/show-hint.min.css',
+  ];
+  $form['#attached']['js'][] = [
+    'type' => 'external',
+    'data' => 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/hint/css-hint.min.js',
+  ];
+
+
+
   $form['#attached']['css'][] = [
     'type' => 'inline',
     'data' => '
@@ -171,18 +187,90 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
     ];
   }
 
-  // Custom inline JavaScript to initialize CodeMirror on the textarea with the chosen theme.
+  $base_url = url('', ['absolute' => TRUE]);
+  $css_suggestions_url = $base_url . backdrop_get_path('module', 'node_css') . '/codemirror/css-suggestions.json';
+
+  // Custom inline JavaScript to initialize CodeMirror on the textarea with locally stored CSS autocompletion.
   $form['#attached']['js'][] = [
     'type' => 'inline',
     'data' => "document.addEventListener('DOMContentLoaded', function() {
+                var cssSuggestions = {};
+
+                // Fetch CSS suggestions from the local JSON file
+                fetch('{$css_suggestions_url}')
+                  .then(response => {
+                    if (!response.ok) {
+                      throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                  })
+                  .then(data => {
+                    cssSuggestions = data;
+                  })
+                  .catch(error => console.error('Error fetching CSS suggestions:', error));
+
                 var editor = CodeMirror.fromTextArea(document.querySelector('.codemirror-css-editor'), {
                   mode: 'css',
                   lineNumbers: true,
                   lineWrapping: true,
                   theme: '{$selected_theme}',  // Apply user-selected theme.
+                  extraKeys: {
+                    'Space': function(cm) {  // Trigger autocompletion on Space key and insert a space.
+                      cm.replaceSelection(' ');  // Insert a regular space before showing suggestions.
+                      var hintOptions = customCssHint(cm);
+                      if (hintOptions.list && hintOptions.list.length > 0) {
+                        CodeMirror.showHint(cm, function(cmInstance) {
+                          return hintOptions;
+                        }, { completeSingle: false });
+                      }
+                    }
+                  },
+                  hintOptions: {
+                    hint: customCssHint,  // Custom hint function.
+                    completeSingle: false  // Do not auto-complete a single option.
+                  }
                 });
-              });",
+
+                // Custom hint function for context-specific CSS autocompletion using local data.
+                function customCssHint(editor) {
+                  var cur = editor.getCursor();
+                  var token = editor.getTokenAt(cur);
+                  var line = editor.getLine(cur.line);
+
+                  // Get the CSS property by inspecting the text before the colon.
+                  var property = line.slice(0, line.indexOf(':')).trim().toLowerCase();
+
+                  // If we have suggestions for the current property, use them.
+                  var list = cssSuggestions[property] || [];
+
+                  // Adjust the from and to positions to avoid overwriting the colon or semicolon.
+                  var start = token.start;
+                  var end = token.end;
+
+                  // Check if a colon exists, and if so, position the cursor to replace only the value.
+                  if (line.includes(':')) {
+                    start = line.indexOf(':') + 1;
+                    if (line.includes(';')) {
+                      end = line.indexOf(';');
+                    }
+                  }
+
+                  return {
+                    list: list.map(function(item) {
+                      return {
+                        text: ' ' + item + ';\\n  ',  // Add space before, semicolon, and newline after the suggestion.
+                        displayText: item,  // Display the item without extra characters.
+                      };
+                    }),
+                    from: CodeMirror.Pos(cur.line, start),
+                    to: CodeMirror.Pos(cur.line, end)
+                  };
+                }
+              });"
   ];
+
+
+
 }
 
 
