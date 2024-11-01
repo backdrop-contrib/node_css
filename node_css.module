@@ -7,21 +7,21 @@ function node_css_menu() {
   $items = [];
 
   // Define the settings page.
-  $items['admin/config/content/node_css'] = array(
+  $items['admin/config/content/node_css'] = [
     'title' => 'Node CSS Settings',
     'description' => 'Settings for custom CSS on nodes.',
     'page callback' => 'backdrop_get_form',
-    'page arguments' => array('node_css_settings'),
+    'page arguments' => ['node_css_settings'],
     'file' => 'node_css.admin.inc',
-    'access arguments' => array('administer site configuration'),
-  );
+    'access arguments' => ['administer site configuration'],
+  ];
 
   return $items;
 }
 
 /**
  * Implements hook_form_FORM_ID_alter() to add a CSS field to node forms
- * with CodeMirror CSS editor support using a CDN.
+ * with CodeMirror CSS editor support and a "Copy code" feature.
  */
 function node_css_form_node_form_alter(&$form, &$form_state) {
   // Load existing configuration.
@@ -30,12 +30,11 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
   $content_type = $form['#node']->type;
 
   // If specific content types are selected, apply Node CSS only to those types.
-  // Return early if the current content type is not among the selected types.
   if (!empty($enabled_content_types) && !in_array($content_type, $enabled_content_types)) {
     return;
   }
 
-  // Determine the default CSS value, checking in order: node-specific CSS, content-type default CSS, or global default CSS.
+  // Determine the default CSS value for this node.
   $default_value = $config->get('node-' . $form['#node']->nid)
     ?? $config->get('default_css_' . $content_type)
     ?? $config->get('default');
@@ -44,54 +43,136 @@ function node_css_form_node_form_alter(&$form, &$form_state) {
   $textarea_height = $config->get('css_textarea_height') ?: 10;
 
   // Get the configured position for the CSS editor.
-  $position = $config->get('css_text_position') ?: 'top';
+  $position = $config->get('css_text_position') ?: 'bottom';  // Default to bottom if not set.
 
-  // Define the vertical tab container.
-  if ($position === 'vertical_tab') {
+  // Define the "Copy code" link and editor wrapper.
+  $copy_link = [
+    '#type' => 'markup',
+    '#markup' => '<a href="#" id="copy-css-code" class="copy-code-link">Copy code</a>',
+  ];
 
-    // Add the CSS editor in a vertical tab.
+  // Structure the form based on the chosen position.
+  if ($position === 'top') {
+    // Place the editor at the top.
+    $form['css_text_wrapper'] = [
+      '#type' => 'container',
+      '#weight' => -100,
+      '#attributes' => ['class' => ['codemirror-editor-wrapper']],
+    ];
+  } elseif ($position === 'vertical_tab') {
+    // Place the editor in a vertical tab.
     $form['css_text_fieldset'] = [
       '#type' => 'fieldset',
       '#title' => t('Node CSS'),
       '#group' => 'additional_settings',
       '#description' => t('Add custom CSS for this node. This CSS will apply only to this specific node.'),
     ];
-    $form['css_text_fieldset']['css_text'] = [
-      '#type' => 'textarea',
-      '#title' => t('Node CSS'),
-      '#rows' => $textarea_height,
-      '#description' => t('Add custom CSS for this node. This CSS will apply only to this specific node.'),
-      '#default_value' => $default_value,
-      '#attributes' => ['class' => ['codemirror-css-editor']],  // Add custom class for targeting.
+    $form['css_text_fieldset']['css_text_wrapper'] = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['codemirror-editor-wrapper']],
+    ];
+  } else {
+    // Default to placing the editor at the bottom.
+    $form['css_text_wrapper'] = [
+      '#type' => 'container',
+      '#weight' => 0,
+      '#attributes' => ['class' => ['codemirror-editor-wrapper']],
     ];
   }
-  else {
-    // Set weight based on position setting: higher weight positions it lower.
-    $fieldset_weight = ($position === 'top') ? -100 : 0;
-    // Define the textarea with custom CSS settings.
-    $form['css_text'] = [
+
+  // Add the "Copy code" link and the `CodeMirror` editor to the appropriate wrapper.
+  if ($position === 'vertical_tab') {
+    $form['css_text_fieldset']['css_text_wrapper']['copy_link'] = $copy_link;
+    $form['css_text_fieldset']['css_text_wrapper']['css_text'] = [
       '#type' => 'textarea',
       '#title' => t('Node CSS'),
       '#rows' => $textarea_height,
-      '#description' => t('Add custom CSS for this node. This CSS will apply only to this specific node.'),
       '#default_value' => $default_value,
-      '#weight' => $fieldset_weight,
-      '#attributes' => ['class' => ['codemirror-css-editor']],  // Add custom class for targeting.
+      '#attributes' => [
+        'id' => 'css-text-editor',
+        'class' => ['codemirror-css-editor']
+      ],
+    ];
+  } else {
+    $form['css_text_wrapper']['copy_link'] = $copy_link;
+    $form['css_text_wrapper']['css_text'] = [
+      '#type' => 'textarea',
+      '#title' => t('Node CSS'),
+      '#rows' => $textarea_height,
+      '#default_value' => $default_value,
+      '#attributes' => [
+        'id' => 'css-text-editor',
+        'class' => ['codemirror-css-editor']
+      ],
     ];
   }
 
   // Attach CodeMirror using the helper function.
   node_css_attach_codemirror($form);
+
+  // Add custom CSS to style the "Copy code" link within the CodeMirror container.
+  $form['#attached']['css'][] = [
+    'type' => 'inline',
+    'data' => '
+      .codemirror-editor-wrapper {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+      }
+
+      .copy-code-link {
+        position: absolute;
+        top: 60px;
+        right: 8px;
+        z-index: 10;
+        background: #f8f9fa;
+        padding: 2px 6px;
+        font-size: 12px;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #007bff;
+        transition: background 0.2s;
+      }
+
+      .copy-code-link:hover {
+        background: #e2e6ea;
+      }
+    ',
+  ];
+
+  // Attach JavaScript for the "Copy code" feature.
+  $form['#attached']['js'][] = [
+    'type' => 'inline',
+    'data' => "
+      document.addEventListener('DOMContentLoaded', function() {
+        var copyButton = document.getElementById('copy-css-code');
+
+        copyButton.addEventListener('click', function(e) {
+          e.preventDefault();
+
+          var editorElement = document.getElementById('css-text-editor');
+          var editorInstance = window.codeMirrorEditors[editorElement.id];
+
+          if (editorInstance) {
+            var cssCode = editorInstance.getValue();
+
+            navigator.clipboard.writeText(cssCode).then(function() {
+              alert('CSS code copied to clipboard!');
+            }).catch(function(err) {
+              alert('Failed to copy CSS code: ' + err);
+            });
+          } else {
+            alert('CodeMirror instance not found.');
+          }
+        });
+      });
+    ",
+  ];
 }
-
-
 
 
 /**
  * Implement hook_node_insert().
- *
- * @param Node $node
- * @return void
  */
 function node_css_node_insert(Node $node) {
   config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
@@ -99,9 +180,6 @@ function node_css_node_insert(Node $node) {
 
 /**
  * Implement hook_node_update().
- *
- * @param Node $node
- * @return void
  */
 function node_css_node_update(Node $node) {
   config_set('node_css.settings', 'node-' . $node->nid, $node->css_text);
@@ -130,7 +208,6 @@ function node_css_node_view($node, $view_mode) {
   }
 }
 
-
 /**
  * Helper function to attach CodeMirror to a form.
  */
@@ -141,7 +218,6 @@ function node_css_attach_codemirror(&$form, $textarea_selector = '.codemirror-cs
   $textarea_height = $config->get('css_textarea_height') ?: 10;  // Default to 10 rows if not set.
 
   // Calculate the height in pixels based on an estimated row height.
-  // Assuming an average row height of 20px, adjust as needed for styling.
   $height_in_pixels = $textarea_height * 20;
 
   // Attach the CodeMirror library and chosen theme from CDN.
@@ -205,11 +281,12 @@ function node_css_attach_codemirror(&$form, $textarea_selector = '.codemirror-cs
   $base_url = url('', ['absolute' => TRUE]);
   $css_suggestions_url = $base_url . backdrop_get_path('module', 'node_css') . '/codemirror/css-suggestions.json';
 
-  // Custom inline JavaScript to initialize CodeMirror on the textarea with locally stored CSS autocompletion.
+  // Custom inline JavaScript to initialize CodeMirror and store each instance in a global array.
   $form['#attached']['js'][] = [
     'type' => 'inline',
     'data' => "document.addEventListener('DOMContentLoaded', function() {
                 var cssSuggestions = {};
+                window.codeMirrorEditors = {};  // Global object to hold each CodeMirror instance
 
                 // Fetch CSS suggestions from the local JSON file
                 fetch('{$css_suggestions_url}')
@@ -226,14 +303,20 @@ function node_css_attach_codemirror(&$form, $textarea_selector = '.codemirror-cs
 
                 var editors = document.querySelectorAll('{$textarea_selector}');
                 editors.forEach(function(textarea) {
-                  CodeMirror.fromTextArea(textarea, {
+                  var wrapper = textarea.closest('.codemirror-editor-wrapper');
+
+                  if (!textarea.id) {
+                    textarea.id = 'css-editor-' + Math.random().toString(36).substr(2, 9);
+                  }
+
+                  var editorInstance = CodeMirror.fromTextArea(textarea, {
                     mode: 'css',
                     lineNumbers: true,
                     lineWrapping: true,
-                    theme: '{$selected_theme}',  // Apply user-selected theme.
+                    theme: '{$selected_theme}',
                     extraKeys: {
-                      'Space': function(cm) {  // Trigger autocompletion on Space key and insert a space.
-                        cm.replaceSelection(' ');  // Insert a regular space before showing suggestions.
+                      'Space': function(cm) {
+                        cm.replaceSelection(' ');
                         var hintOptions = customCssHint(cm);
                         if (hintOptions.list && hintOptions.list.length > 0) {
                           CodeMirror.showHint(cm, function(cmInstance) {
@@ -243,29 +326,22 @@ function node_css_attach_codemirror(&$form, $textarea_selector = '.codemirror-cs
                       }
                     },
                     hintOptions: {
-                      hint: customCssHint,  // Custom hint function.
-                      completeSingle: false  // Do not auto-complete a single option.
+                      hint: customCssHint,
+                      completeSingle: false
                     }
                   });
+                  window.codeMirrorEditors[textarea.id] = editorInstance;
                 });
 
-                // Custom hint function for context-specific CSS autocompletion using local data.
                 function customCssHint(editor) {
                   var cur = editor.getCursor();
                   var token = editor.getTokenAt(cur);
                   var line = editor.getLine(cur.line);
-
-                  // Get the CSS property by inspecting the text before the colon.
                   var property = line.slice(0, line.indexOf(':')).trim().toLowerCase();
-
-                  // If we have suggestions for the current property, use them.
                   var list = cssSuggestions[property] || [];
-
-                  // Adjust the from and to positions to avoid overwriting the colon or semicolon.
                   var start = token.start;
                   var end = token.end;
 
-                  // Check if a colon exists, and if so, position the cursor to replace only the value.
                   if (line.includes(':')) {
                     start = line.indexOf(':') + 1;
                     if (line.includes(';')) {
@@ -276,8 +352,8 @@ function node_css_attach_codemirror(&$form, $textarea_selector = '.codemirror-cs
                   return {
                     list: list.map(function(item) {
                       return {
-                        text: ' ' + item + ';\\n  ',  // Add space before, semicolon, and newline after the suggestion.
-                        displayText: item,  // Display the item without extra characters.
+                        text: ' ' + item + ';\\n  ',
+                        displayText: item,
                       };
                     }),
                     from: CodeMirror.Pos(cur.line, start),
