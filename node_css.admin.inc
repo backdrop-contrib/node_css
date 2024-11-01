@@ -39,6 +39,28 @@ function node_css_settings() {
     '#default_value' => $config->get('codemirror_theme') ?: 'default',
   ];
 
+  // Add a height setting for the CSS text area.
+  $form['css_textarea_height'] = [
+    '#type' => 'number',
+    '#title' => t('CSS Textarea Height (rows)'),
+    '#description' => t('Set the number of rows for the Node CSS textarea on each node. Default is 10.'),
+    '#default_value' => $config->get('css_textarea_height') ?: 10,
+    '#min' => 1,
+  ];
+
+  // Add position setting for the CSS fieldset.
+  $form['css_text_position'] = [
+    '#type' => 'select',
+    '#title' => t('Position of CSS Editor'),
+    '#description' => t('Choose whether to display the CSS editor at the top of the page or between the tabs and the "Save" button.'),
+    '#options' => [
+      'top' => t('Top (above content)'),
+      'bottom' => t('Bottom (between tabs and "Save" button)'),
+      'vertical_tab' => t('Vertical Tab'),
+    ],
+    '#default_value' => $config->get('css_text_position') ?: 'top',
+  ];
+
   // Retrieve all content types.
   $content_types = node_type_get_types();
   $options = [];
@@ -90,10 +112,12 @@ function node_css_settings() {
  * Submit handler for the Node CSS settings form.
  */
 function node_css_settings_submit($form, &$form_state) {
-  // Save selected content types and CodeMirror theme in configuration.
+  // Save selected content types, CodeMirror theme, textarea height, and display position.
   $config = config('node_css.settings');
   $config->set('enabled_content_types', array_filter($form_state['values']['enabled_content_types']));
   $config->set('codemirror_theme', $form_state['values']['codemirror_theme']);
+  $config->set('css_textarea_height', $form_state['values']['css_textarea_height']);
+  $config->set('css_text_position', $form_state['values']['css_text_position']);  // Save position setting.
 
   // Save each default CSS value for the selected content types.
   foreach ($form_state['values']['enabled_content_types'] as $type => $enabled) {
@@ -107,3 +131,6 @@ function node_css_settings_submit($form, &$form_state) {
   // Display a status message.
   backdrop_set_message(t('The Node CSS settings have been saved.'));
 }
+
+
+
